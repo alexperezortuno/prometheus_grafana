@@ -1,0 +1,95 @@
+version: "3.7"
+
+services:
+    prometheus:
+        container_name: prometheus
+        image: prom/prometheus:v2.26.0
+        volumes:
+            - ./prometheus:/etc/prometheus
+            - prometheus_data:/prometheus
+        command:
+            - '--config.file=/etc/prometheus/prometheus.yml'
+            - '--storage.tsdb.path=/prometheus'
+            - '--storage.tsdb.retention.time=1w'
+            - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+            - '--web.console.templates=/usr/share/prometheus/consoles'
+        ports:
+            - 9090:9090
+        network_mode: host
+
+    grafana:
+        container_name: grafana
+        image: grafana/grafana:7.5.3
+        ports:
+            - 3000:3000
+        depends_on:
+            - prometheus
+        volumes:
+            - grafana_data:/var/lib/grafana
+            - "./grafana/provisioning/:/etc/grafana/provisioning/"
+        environment:
+            - GF_SECURITY_ADMIN_USER=admin
+            - GF_SECURITY_ADMIN_PASSWORD=admin
+            - GF_USERS_ALLOW_SIGN_UP=false
+        network_mode: host
+
+    cadvisor:
+        container_name: cadvisor
+        image: google/cadvisor
+        command:
+            - '-port=8090'
+        volumes:
+            - /:/rootfs:ro
+            - /sys:/sys:ro
+            - /var/lib/docker/:/var/lib/docker:ro
+            - /dev/disk/:/dev/disk:ro
+        ports:
+            - 8090:8090
+        depends_on:
+            - prometheus
+        network_mode: host
+
+    postgres_exporter:
+        labels:
+            - name=postgres_export
+        container_name: db_exporter
+        image: wrouesnel/postgres_exporter:v0.8.0
+        environment:
+            - DATA_SOURCE_URI=$DB_URI
+            - DATA_SOURCE_USER=$DB_USER
+            - DATA_SOURCE_PASS=$DB_PASSWORD
+        ports:
+            - 9187:9187
+        depends_on:
+            - prometheus
+        network_mode: host
+
+    node_exporter:
+        image: quay.io/prometheus/node-exporter:latest
+        container_name: node_exporter
+        pid: host
+        ports:
+            - 9100:9100
+        depends_on:
+            - prometheus
+        volumes:
+            - "/:/host:ro,rslave"
+        network_mode: host
+
+    alertmanager:
+        image: prom/alertmanager
+        ports:
+            - 9093:9093
+        depends_on:
+            - prometheus
+        volumes:
+            - ./prometheus/alertmanager/:/etc/alertmanager/
+        command:
+            - '--config.file=/etc/alertmanager/config.yml'
+            - '--storage.path=/alertmanager'
+        network_mode: host
+
+volumes:
+    prometheus_data: { }
+    grafana_data: { }
+    node_exporter_data: { }
